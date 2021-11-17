@@ -18,7 +18,6 @@ package config
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -31,7 +30,6 @@ import (
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeclient "k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -113,13 +111,20 @@ func SetupLogger(config LogConfig, req admission.Request) {
 }
 
 func LoadKeySecret(keySecretNamespace, keySecretName string) (string, error) {
-	obj, err := kubeutil.GetResource("v1", "Secret", keySecretNamespace, keySecretName)
+	config, err := kubeutil.GetKubeConfig()
 	if err != nil {
-		return "", errors.Wrap(err, fmt.Sprintf("failed to get a secret `%s` in `%s` namespace", keySecretName, keySecretNamespace))
+		return "", nil
 	}
-	objBytes, _ := json.Marshal(obj.Object)
-	var secret v1.Secret
-	_ = json.Unmarshal(objBytes, &secret)
+	clientset, err := kubeclient.NewForConfig(config)
+	if err != nil {
+		log.Error(err)
+		return "", nil
+	}
+	secret, err := clientset.CoreV1().Secrets(keySecretNamespace).Get(context.Background(), keySecretName, metav1.GetOptions{})
+	if err != nil {
+		log.Error(err)
+		return "", nil
+	}
 	keyDir := fmt.Sprintf("/tmp/%s/%s/", keySecretNamespace, keySecretName)
 	sumErr := []string{}
 	keyPath := ""

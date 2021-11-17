@@ -82,11 +82,13 @@ func RequestHandler(req admission.Request, paramObj *k8smnfconfig.ParameterObjec
 	k8smnfconfig.SetupLogger(rhconfig.Log, req)
 
 	log.WithFields(log.Fields{
-		"namespace": req.Namespace,
-		"name":      req.Name,
-		"kind":      req.Kind.Kind,
-		"operation": req.Operation,
-		"userName":  req.UserInfo.Username,
+		"namespace":  req.Namespace,
+		"name":       req.Name,
+		"kind":       req.Kind.Kind,
+		"operation":  req.Operation,
+		"userName":   req.UserInfo.Username,
+		"UID":        string(resource.GetUID()),
+		"requestUID": string(req.UID),
 	}).Info("Process new request")
 
 	// get enforce action
@@ -100,11 +102,13 @@ func RequestHandler(req admission.Request, paramObj *k8smnfconfig.ParameterObjec
 	} else {
 		if paramObj.Action.Mode != "enforce" && paramObj.Action.Mode != "detect" {
 			log.WithFields(log.Fields{
-				"namespace": req.Namespace,
-				"name":      req.Name,
-				"kind":      req.Kind.Kind,
-				"operation": req.Operation,
-				"userName":  req.UserInfo.Username,
+				"namespace":  req.Namespace,
+				"name":       req.Name,
+				"kind":       req.Kind.Kind,
+				"operation":  req.Operation,
+				"userName":   req.UserInfo.Username,
+				"UID":        string(resource.GetUID()),
+				"requestUID": string(req.UID),
 			}).Warningf("run mode should be set to 'enforce' or 'detect' in rule,%s", paramObj.ConstraintName)
 		}
 		if paramObj.Action.Mode == "enforce" {
@@ -116,6 +120,15 @@ func RequestHandler(req admission.Request, paramObj *k8smnfconfig.ParameterObjec
 	} else {
 		log.Info("enforce action is disabled.")
 	}
+	log.WithFields(log.Fields{
+		"namespace":  req.Namespace,
+		"name":       req.Name,
+		"kind":       req.Kind.Kind,
+		"operation":  req.Operation,
+		"userName":   req.UserInfo.Username,
+		"UID":        string(resource.GetUID()),
+		"requestUID": string(req.UID),
+	}).Info("PrepareVerifyResource: checkpoint1")
 
 	// setup env value for sigstore
 	if rhconfig.SigStoreConfig.RekorServer != "" {
@@ -146,6 +159,15 @@ func RequestHandler(req admission.Request, paramObj *k8smnfconfig.ParameterObjec
 
 	//check scope
 	inScopeObjMatched := paramObj.InScopeObjects.Match(resource)
+	log.WithFields(log.Fields{
+		"namespace":  req.Namespace,
+		"name":       req.Name,
+		"kind":       req.Kind.Kind,
+		"operation":  req.Operation,
+		"userName":   req.UserInfo.Username,
+		"UID":        string(resource.GetUID()),
+		"requestUID": string(req.UID),
+	}).Info("PrepareVerifyResource: checkpoint2")
 
 	// mutation check
 	if isUpdateRequest(req.AdmissionRequest.Operation) {
@@ -160,6 +182,16 @@ func RequestHandler(req admission.Request, paramObj *k8smnfconfig.ParameterObjec
 			return makeResultFromRequestHandler(true, "no mutation found", enforce, req)
 		}
 	}
+
+	log.WithFields(log.Fields{
+		"namespace":  req.Namespace,
+		"name":       req.Name,
+		"kind":       req.Kind.Kind,
+		"operation":  req.Operation,
+		"userName":   req.UserInfo.Username,
+		"UID":        string(resource.GetUID()),
+		"requestUID": string(req.UID),
+	}).Info("PrepareVerifyResource: checkpoint3")
 
 	allow := false
 	message := ""
@@ -181,34 +213,61 @@ func RequestHandler(req admission.Request, paramObj *k8smnfconfig.ParameterObjec
 		}
 		vo := setVerifyOption(paramObj, rhconfig, signatureAnnotationType)
 		log.WithFields(log.Fields{
-			"namespace": req.Namespace,
-			"name":      req.Name,
-			"kind":      req.Kind.Kind,
-			"operation": req.Operation,
-			"userName":  req.UserInfo.Username,
+			"namespace":  req.Namespace,
+			"name":       req.Name,
+			"kind":       req.Kind.Kind,
+			"operation":  req.Operation,
+			"userName":   req.UserInfo.Username,
+			"UID":        string(resource.GetUID()),
+			"requestUID": string(req.UID),
+		}).Info("PrepareVerifyResource: checkpoint4")
+		log.WithFields(log.Fields{
+			"namespace":  req.Namespace,
+			"name":       req.Name,
+			"kind":       req.Kind.Kind,
+			"operation":  req.Operation,
+			"userName":   req.UserInfo.Username,
+			"UID":        string(resource.GetUID()),
+			"requestUID": string(req.UID),
 		}).Debug("VerifyOption: ", vo)
 		// call VerifyResource with resource, verifyOption, keypath, imageRef
-		result, err := k8smanifest.VerifyResource(resource, vo)
+		annotations["requestUID"] = string(req.UID)
+		modified := &resource
+		modified.SetAnnotations(annotations)
+		result, err := k8smanifest.VerifyResource(*modified, vo)
 		log.WithFields(log.Fields{
-			"namespace": req.Namespace,
-			"name":      req.Name,
-			"kind":      req.Kind.Kind,
-			"operation": req.Operation,
-			"userName":  req.UserInfo.Username,
+			"namespace":  req.Namespace,
+			"name":       req.Name,
+			"kind":       req.Kind.Kind,
+			"operation":  req.Operation,
+			"userName":   req.UserInfo.Username,
+			"UID":        string(resource.GetUID()),
+			"requestUID": string(req.UID),
 		}).Debug("VerifyResource result: ", result)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"namespace": req.Namespace,
-				"name":      req.Name,
-				"kind":      req.Kind.Kind,
-				"operation": req.Operation,
-				"userName":  req.UserInfo.Username,
+				"namespace":  req.Namespace,
+				"name":       req.Name,
+				"kind":       req.Kind.Kind,
+				"operation":  req.Operation,
+				"userName":   req.UserInfo.Username,
+				"UID":        string(resource.GetUID()),
+				"requestUID": string(req.UID),
 			}).Warningf("Signature verification is required for this request, but verifyResource return error ; %s", err.Error())
 			r := makeResultFromRequestHandler(false, err.Error(), enforce, req)
 			// generate events
 			if rhconfig.SideEffectConfig.CreateDenyEvent {
 				_ = createOrUpdateEvent(req, r, paramObj.ConstraintName)
 			}
+			log.WithFields(log.Fields{
+				"namespace":  req.Namespace,
+				"name":       req.Name,
+				"kind":       req.Kind.Kind,
+				"operation":  req.Operation,
+				"userName":   req.UserInfo.Username,
+				"UID":        string(resource.GetUID()),
+				"requestUID": string(req.UID),
+			}).Info("event reported (this might be skipped)")
 			return r
 		}
 
@@ -259,11 +318,29 @@ func RequestHandler(req admission.Request, paramObj *k8smnfconfig.ParameterObjec
 	}
 
 	r := makeResultFromRequestHandler(allow, message, enforce, req)
+	log.WithFields(log.Fields{
+		"namespace":  req.Namespace,
+		"name":       req.Name,
+		"kind":       req.Kind.Kind,
+		"operation":  req.Operation,
+		"userName":   req.UserInfo.Username,
+		"UID":        string(resource.GetUID()),
+		"requestUID": string(req.UID),
+	}).Info("result decided")
 
 	// generate events
 	if rhconfig.SideEffectConfig.CreateDenyEvent {
 		_ = createOrUpdateEvent(req, r, paramObj.ConstraintName)
 	}
+	log.WithFields(log.Fields{
+		"namespace":  req.Namespace,
+		"name":       req.Name,
+		"kind":       req.Kind.Kind,
+		"operation":  req.Operation,
+		"userName":   req.UserInfo.Username,
+		"UID":        string(resource.GetUID()),
+		"requestUID": string(req.UID),
+	}).Info("event reported (this might be skipped)")
 	return r
 }
 

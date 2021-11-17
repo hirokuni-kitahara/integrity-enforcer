@@ -96,7 +96,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("failed to convert `request` in input object into %T", request), http.StatusInternalServerError)
 		return
 	}
-	log.Infof("request has been parsed successfully, kind: %s, name: %s", request.Kind.Kind, request.Name)
+	log.Infof("request parsed, kind: %s, name: %s, UID: %s", request.Kind.Kind, request.Name, string(request.UID))
 
 	parametersIf, parametersFound := inputMap["parameters"]
 	if !parametersFound {
@@ -120,7 +120,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Infof("returning a response, allow: %v", result.Allow)
+	log.Infof("returning a response %v, for kind: %s, name: %s, UID: %s", result, request.Kind.Kind, request.Name, string(request.UID))
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(resp); err != nil {
 		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)

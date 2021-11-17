@@ -16,3 +16,5 @@ require (
 )
 
 replace github.com/open-cluster-management/integrity-shield/shield => ./
+
+replace github.com/sigstore/k8s-manifest-sigstore => ../../k8s-manifest-sigstore
