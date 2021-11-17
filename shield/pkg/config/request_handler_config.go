@@ -26,9 +26,9 @@ import (
 	"time"
 
 	"github.com/ghodss/yaml"
+	kubeutil "github.com/open-cluster-management/integrity-shield/shield/pkg/kubernetes"
 	"github.com/pkg/errors"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
-	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeclient "k8s.io/client-go/kubernetes"
@@ -51,13 +51,13 @@ var logLevelMap = map[string]log.Level{
 }
 
 type RequestHandlerConfig struct {
-	ImageVerificationConfig ImageVerificationConfig `json:"imageVerificationConfig,omitempty"`
-	KeyPathList             []string                `json:"keyPathList,omitempty"`
-	SigStoreConfig          SigStoreConfig          `json:"sigStoreConfig,omitempty"`
-	RequestFilterProfile    RequestFilterProfile    `json:"requestFilterProfile,omitempty"`
-	Log                     LogConfig               `json:"log,omitempty"`
-	SideEffectConfig        SideEffectConfig        `json:"sideEffect,omitempty"`
-	DefaultConstraintAction Action                  `json:"defaultConstraintAction,omitempty"`
+	KeyPathList             []string               `json:"keyPathList,omitempty"`
+	SigStoreConfig          SigStoreConfig         `json:"sigStoreConfig,omitempty"`
+	RequestFilterProfile    RequestFilterProfile   `json:"requestFilterProfile,omitempty"`
+	Log                     LogConfig              `json:"log,omitempty"`
+	DecisionReporterConfig  DecisionReporterConfig `json:"decisionReporterConfig,omitempty"`
+	SideEffectConfig        SideEffectConfig       `json:"sideEffect,omitempty"`
+	DefaultConstraintAction Action                 `json:"defaultConstraintAction,omitempty"`
 	Options                 []string
 }
 
@@ -67,12 +67,15 @@ type LogConfig struct {
 	Format                   string `json:"format,omitempty"`
 }
 
+type DecisionReporterConfig struct {
+	Enabled   bool  `json:"enabled,omitempty"`
+	LimitSize int64 `json:"limitSize,omitempty"`
+	File      string
+}
+
 type SideEffectConfig struct {
 	// Event
 	CreateDenyEvent bool `json:"createDenyEvent"`
-}
-
-type ImageVerificationConfig struct {
 }
 
 type SigStoreConfig struct {
@@ -111,14 +114,10 @@ func SetupLogger(config LogConfig, req admission.Request) {
 }
 
 func LoadKeySecret(keySecretNamespace, keySecretName string) (string, error) {
-	config, err := kubeutil.GetKubeConfig()
+	kubeconf, _ := kubeutil.GetKubeConfig()
+	clientset, err := kubeclient.NewForConfig(kubeconf)
 	if err != nil {
-		return "", nil
-	}
-	clientset, err := kubeclient.NewForConfig(config)
-	if err != nil {
-		log.Error(err)
-		return "", nil
+		return "", err
 	}
 	secret, err := clientset.CoreV1().Secrets(keySecretNamespace).Get(context.Background(), keySecretName, metav1.GetOptions{})
 	if err != nil {
